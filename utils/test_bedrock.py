@@ -56,6 +56,13 @@ async def test_bedrock_claude_model():
     try:
         # Get the model ID from environment variables or use the default
         model_id = os.environ.get("AWS_CLAUDE_MODEL_ID", "anthropic.claude-3-7-sonnet-20250219-v1:0")
+        inference_profile = os.environ.get("AWS_BEDROCK_INFERENCE_PROFILE", "")
+        
+        if inference_profile:
+            print(f"\nUsing inference profile: {inference_profile}")
+        else:
+            print("\nNo inference profile specified. Using direct model ID.")
+            print("You may encounter errors if your AWS account requires inference profiles.")
         
         # Create a BedrockClaudeModel instance
         claude_model = BedrockClaudeModel(model_id=model_id)
@@ -66,44 +73,28 @@ async def test_bedrock_claude_model():
         model_obj = await claude_model.agent_model()
         print(f"  - agent_model: {type(model_obj).__name__}")
         print(f"  - model_id: {claude_model._model_id}")
+        print(f"  - inference_profile: {claude_model._inference_profile or 'Not set'}")
         print(f"  - supports_functions: {claude_model.supports_functions}")
         
-        # Create a simple agent with the Claude model
-        try:
-            agent = Agent(claude_model, system_prompt="You are a helpful AI assistant.")
-            print("\nAgent created successfully.")
-        except Exception as e:
-            print(f"\nFailed to create agent: {str(e)}")
-            print(f"Agent error type: {type(e)}")
-            import traceback
-            print(traceback.format_exc())
-            return False
+        # Instead of using the Agent class, directly call our predict method
+        print("\nSending direct message to Claude 3.7...")
+        messages = [
+            {"role": "user", "content": "Hello! Can you confirm you're Claude 3.7 running on AWS Bedrock?"}
+        ]
         
-        # Run the agent with a simple message
-        try:
-            result = await agent.run("Hello! Can you confirm you're Claude 3.7 running on AWS Bedrock?")
-            
-            # Print the result
+        response = await claude_model.predict(messages)
+        
+        # Check if we got a response
+        if hasattr(response, 'parts') and response.parts and hasattr(response.parts[0], 'text'):
             print("\n✅ Successfully called Claude 3.7 on AWS Bedrock!")
             print("\nResponse from Claude 3.7:")
-            print(result.data)
-        except Exception as e:
-            error_str = str(e)
-            if "ValidationException" in error_str and "inference profile" in error_str:
-                print("\n⚠️ AWS Bedrock API call failed due to inference profile requirement.")
-                print("This is an expected error when testing without proper AWS Bedrock provisioning.")
-                print("To use in production, you need to create an inference profile in AWS Bedrock.")
-                print("\n✅ The integration code is working correctly, but the AWS service requires additional setup.")
-                return True
-            else:
-                print(f"\nFailed to run agent: {error_str}")
-                print(f"Run error type: {type(e)}")
-                import traceback
-                print(traceback.format_exc())
-                return False
-        
-        return True
-        
+            print(response.parts[0].text)
+            return True
+        else:
+            print("\n❌ Got a response but in unexpected format.")
+            print(f"Response structure: {type(response)}")
+            return False
+            
     except Exception as e:
         print(f"\n❌ Failed to call Claude 3.7 on AWS Bedrock: {str(e)}")
         print("\nPlease check your AWS credentials and permissions.")

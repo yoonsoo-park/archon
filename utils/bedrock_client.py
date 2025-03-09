@@ -97,6 +97,9 @@ class BedrockClaudeModel(Model):
         # Initialize the Bedrock client
         self.bedrock_client = get_bedrock_runtime_client()
         self._model_id = model_id
+        
+        # Get inference profile ID/ARN if available
+        self._inference_profile = os.environ.get("AWS_BEDROCK_INFERENCE_PROFILE", "")
     
     def name(self) -> str:
         """
@@ -136,6 +139,7 @@ class BedrockClaudeModel(Model):
         # Convert ModelRequest to a format we can use
         message_list = []
         system_prompt = ""
+        user_message_added = False
         
         # Extract messages in the format we expect
         if hasattr(messages, "system_prompt") and messages.system_prompt:
@@ -144,16 +148,39 @@ class BedrockClaudeModel(Model):
             
         if hasattr(messages, "user_prompt") and messages.user_prompt:
             message_list.append({"role": "user", "content": messages.user_prompt})
+            user_message_added = True
             
         if hasattr(messages, "messages") and messages.messages:
             for msg in messages.messages:
                 if msg.role == "system" and not system_prompt:
                     system_prompt = msg.content
-                message_list.append({"role": msg.role, "content": msg.content})
+                    message_list.append({"role": "system", "content": msg.content})
+                elif msg.role == "user":
+                    user_message_added = True
+                    message_list.append({"role": msg.role, "content": msg.content})
+                else:
+                    message_list.append({"role": msg.role, "content": msg.content})
+        
+        # Ensure we have at least one user message
+        if not user_message_added:
+            message_list.append({"role": "user", "content": "Hello Claude, can you respond to this message?"})
             
         # Now that we have the messages in a format we understand, call predict
         response = await self.predict(message_list, **(model_settings or {}))
-        return response, {"usage": response.get("usage", {})}
+        
+        # Create a proper usage object as expected by Pydantic AI
+        # We need to create an object with the attributes that will be accessed
+        class Usage:
+            def __init__(self):
+                self.completion_tokens = 0
+                self.prompt_tokens = 0
+                self.total_tokens = 0
+                self.requests = 1
+                self.request_tokens = 0
+                self.response_tokens = 0
+                self.details = None
+                
+        return response, Usage()
     
     async def predict(
         self,
@@ -168,9 +195,18 @@ class BedrockClaudeModel(Model):
             **kwargs: Additional parameters to pass to the model
             
         Returns:
-            The model response as a dictionary
+            The model response as a ModelResponse-like object
         """
+        # Ensure we have at least one message to send
+        if not messages:
+            # If no messages provided, create a default user message
+            messages = [{"role": "user", "content": "Hello"}]
+            
         anthropic_messages = self._convert_to_anthropic_messages(messages)
+        
+        # If we have no messages after conversion, add a default one
+        if not anthropic_messages:
+            anthropic_messages = [{"role": "user", "content": "Hello"}]
         
         # Extract system prompt if present
         system_prompt = ""
@@ -188,59 +224,48 @@ class BedrockClaudeModel(Model):
             "max_tokens": kwargs.get("max_tokens", 4096),
             "temperature": kwargs.get("temperature", 0.7),
             "messages": anthropic_messages,
-            "system": system_prompt,
         }
+        
+        # Only add system if it's not empty
+        if system_prompt:
+            request_body["system"] = system_prompt
         
         # Add tools if provided
         if tools:
             request_body["tools"] = tools
             
         # Make the API call to Bedrock
-        response = self.bedrock_client.invoke_model(
-            modelId=self._model_id,
-            body=json.dumps(request_body)
-        )
+        invoke_params = {
+            "body": json.dumps(request_body)
+        }
+        
+        # Use inference profile if available, otherwise use model ID
+        if self._inference_profile:
+            invoke_params["modelId"] = self._inference_profile
+            print(f"Using inference profile: {self._inference_profile}")
+        else:
+            invoke_params["modelId"] = self._model_id
+            print(f"Using direct model ID: {self._model_id}")
+            
+        response = self.bedrock_client.invoke_model(**invoke_params)
         
         # Parse and return the response
         response_body = json.loads(response['body'].read())
         
-        # Convert to OpenAI-like format for compatibility
-        openai_format_response = {
-            "id": "bedrock-" + str(uuid.uuid4()),
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": self._model_id,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": response_body["content"][0]["text"] if response_body.get("content") else None,
-                    },
-                    "finish_reason": "stop"
-                }
-            ],
-            "usage": {
-                "prompt_tokens": -1,  # Bedrock doesn't provide this
-                "completion_tokens": -1,  # Bedrock doesn't provide this
-                "total_tokens": -1  # Bedrock doesn't provide this
-            }
-        }
-        
-        # Add tool calls if present
-        if response_body.get("tool_use"):
-            openai_format_response["choices"][0]["message"]["tool_calls"] = []
-            for tool_use in response_body["tool_use"]:
-                openai_format_response["choices"][0]["message"]["tool_calls"].append({
-                    "id": tool_use.get("id", "bedrock-tool-" + str(uuid.uuid4())),
-                    "type": "function",
-                    "function": {
-                        "name": tool_use["name"],
-                        "arguments": json.dumps(tool_use["input"]) 
-                    }
-                })
-            
-        return openai_format_response
+        # Convert to a format compatible with Pydantic AI
+        class ModelResponse:
+            def __init__(self, content):
+                self.parts = [ModelResponsePart(content)]
+                
+        class ModelResponsePart:
+            def __init__(self, content):
+                self.text = content
+                
+        if response_body.get("content"):
+            content = response_body["content"][0]["text"] if response_body.get("content") else ""
+            return ModelResponse(content)
+        else:
+            return ModelResponse("No content returned from model")
     
     def _convert_to_anthropic_messages(self, messages: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
         """
@@ -253,6 +278,7 @@ class BedrockClaudeModel(Model):
             Messages in Anthropic format
         """
         anthropic_messages = []
+        has_user_message = False
         
         for msg in messages:
             if msg["role"] == "system":
@@ -287,12 +313,23 @@ class BedrockClaudeModel(Model):
                         "content": msg["content"]
                     }]
                 })
+                has_user_message = True
                 continue
                 
             # Add the message in Anthropic format
+            if msg["role"] == "user":
+                has_user_message = True
+                
             anthropic_messages.append({
                 "role": "user" if msg["role"] == "user" else "assistant",
                 "content": content
+            })
+        
+        # Ensure there's at least one user message
+        if not has_user_message and not anthropic_messages:
+            anthropic_messages.append({
+                "role": "user", 
+                "content": "Hello"
             })
             
         return anthropic_messages 

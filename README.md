@@ -59,8 +59,20 @@ To use Claude 3.7 on AWS Bedrock, you need to:
    - Set your AWS credentials: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
    - Set `AWS_REGION` to the region where Bedrock is available (e.g., `us-east-1`)
    - Set `AWS_CLAUDE_MODEL_ID` to `anthropic.claude-3-7-sonnet-20250219-v1:0`
+   - Set `AWS_BEDROCK_INFERENCE_PROFILE` to your inference profile ID or ARN
+     - Example profile ID: `us.anthropic.claude-3-7-sonnet-20250219-v1:0`
+     - Example profile ARN: `arn:aws:bedrock:us-east-1:123456789012:inference-profile/my-inference-profile`
 
-3. To test your Bedrock configuration, run:
+3. Setting up the inference profile:
+
+   - Log into AWS console and navigate to Amazon Bedrock
+   - Go to "Inference profiles" in the left sidebar
+   - Click "Create inference profile"
+   - Select Claude 3.7 Sonnet as the model
+   - Complete the configuration and take note of the Profile ID/ARN
+   - You can use either the profile ID or ARN in the `AWS_BEDROCK_INFERENCE_PROFILE` environment variable
+
+4. To test your Bedrock configuration, run:
    ```bash
    python -m utils.test_bedrock
    ```
