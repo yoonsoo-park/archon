@@ -39,10 +39,11 @@ openai_client = None
 base_url = get_env_var('BASE_URL') or 'https://api.openai.com/v1'
 api_key = get_env_var('LLM_API_KEY') or 'no-llm-api-key-provided'
 is_ollama = "localhost" in base_url.lower()
+is_bedrock = base_url.lower() == "bedrock"
 
 if is_ollama:
     openai_client = AsyncOpenAI(base_url=base_url,api_key=api_key)
-elif get_env_var("OPENAI_API_KEY"):
+elif get_env_var("OPENAI_API_KEY") and not is_bedrock:
     openai_client = AsyncOpenAI(api_key=get_env_var("OPENAI_API_KEY"))
 else:
     openai_client = None
@@ -644,12 +645,12 @@ def environment_tab():
     env_vars = {
         "BASE_URL": {
             "description": "Base URL for the OpenAI instance (default is https://api.openai.com/v1)",
-            "help": "OpenAI: https://api.openai.com/v1\n\n\n\nAnthropic: https://api.anthropic.com/v1\n\nOllama (example): http://localhost:11434/v1\n\nOpenRouter: https://openrouter.ai/api/v1",
+            "help": "OpenAI: https://api.openai.com/v1\n\n\n\nAnthropic: https://api.anthropic.com/v1\n\nOllama (example): http://localhost:11434/v1\n\nOpenRouter: https://openrouter.ai/api/v1\n\nAWS Bedrock: set to 'bedrock'",
             "sensitive": False
         },
         "LLM_API_KEY": {
             "description": "API key for your LLM provider",
-            "help": "For OpenAI: https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key\n\nFor Anthropic: https://console.anthropic.com/account/keys\n\nFor OpenRouter: https://openrouter.ai/keys\n\nFor Ollama, no need to set this unless you specifically configured an API key",
+            "help": "For OpenAI: https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key\n\nFor Anthropic: https://console.anthropic.com/account/keys\n\nFor OpenRouter: https://openrouter.ai/keys\n\nFor Ollama, no need to set this unless you specifically configured an API key\n\nFor AWS Bedrock: not used (AWS credentials are used instead)",
             "sensitive": True
         },
         "OPENAI_API_KEY": {
@@ -680,6 +681,26 @@ def environment_tab():
         "EMBEDDING_MODEL": {
             "description": "Embedding model you want to use",
             "help": "Example for Ollama: nomic-embed-text\n\nExample for OpenAI: text-embedding-3-small",
+            "sensitive": False
+        },
+        "AWS_ACCESS_KEY_ID": {
+            "description": "AWS Access Key ID for Bedrock access",
+            "help": "Required when using AWS Bedrock. Get this from your AWS IAM credentials.",
+            "sensitive": True
+        },
+        "AWS_SECRET_ACCESS_KEY": {
+            "description": "AWS Secret Access Key for Bedrock access",
+            "help": "Required when using AWS Bedrock. Get this from your AWS IAM credentials.",
+            "sensitive": True
+        },
+        "AWS_REGION": {
+            "description": "AWS Region for Bedrock",
+            "help": "The AWS region where the Bedrock model is deployed (e.g., us-east-1, us-west-2).",
+            "sensitive": False
+        },
+        "AWS_CLAUDE_MODEL_ID": {
+            "description": "AWS Bedrock Claude Model ID",
+            "help": "The model ID for Claude on AWS Bedrock. Default: anthropic.claude-3-7-sonnet-20250219-v1:0",
             "sensitive": False
         }
     }

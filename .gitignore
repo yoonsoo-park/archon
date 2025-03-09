@@ -1,0 +1,18 @@
+# Folders
+workbench
+__pycache__/
+*/__pycache__/
+**/__pycache__/
+utils/__pycache__/
+venv
+.langgraph_api
+
+# Python bytecode
+*.py[cod]
+*$py.class
+
+# Files
+.env
+.env.temp
+.env.test
+env_vars.json 

@@ -19,6 +19,7 @@ from supabase import Client
 # Add the parent directory to sys.path to allow importing from the parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.utils import get_env_var
+from utils.bedrock_client import BedrockClaudeModel
 
 load_dotenv()
 
@@ -28,8 +29,18 @@ api_key = get_env_var('LLM_API_KEY') or 'no-llm-api-key-provided'
 
 is_ollama = "localhost" in base_url.lower()
 is_anthropic = "anthropic" in base_url.lower()
+is_bedrock = base_url.lower() == "bedrock"
 
-model = AnthropicModel(llm, api_key=api_key) if is_anthropic else OpenAIModel(llm, base_url=base_url, api_key=api_key)
+# Model selection based on the base_url
+if is_bedrock:
+    # Get the Bedrock Claude model ID
+    bedrock_model_id = get_env_var('AWS_CLAUDE_MODEL_ID') or 'anthropic.claude-3-7-sonnet-20250219-v1:0'
+    model = BedrockClaudeModel(model_id=bedrock_model_id)
+elif is_anthropic:
+    model = AnthropicModel(llm, api_key=api_key)
+else:
+    model = OpenAIModel(llm, base_url=base_url, api_key=api_key)
+
 embedding_model = get_env_var('EMBEDDING_MODEL') or 'text-embedding-3-small'
 
 logfire.configure(send_to_logfire='if-token-present')

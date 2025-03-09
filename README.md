@@ -41,7 +41,29 @@ Since V4 is the current version of Archon, all the code for V4 is in both the ma
 - Docker (optional but preferred)
 - Python 3.11+
 - Supabase account (for vector database)
-- OpenAI/Anthropic/OpenRouter API key or Ollama for local LLMs (note that only OpenAI supports streaming in the Streamlit UI currently)
+- An LLM access (one of the following):
+  - OpenAI API key
+  - Anthropic API key
+  - OpenRouter API key
+  - Ollama for local LLMs
+  - AWS Bedrock access for Claude 3.7
+
+### AWS Bedrock Configuration (Claude 3.7)
+
+To use Claude 3.7 on AWS Bedrock, you need to:
+
+1. Set up an AWS IAM user with access to Bedrock
+2. Configure the environment variables:
+
+   - Set `BASE_URL` to `bedrock`
+   - Set your AWS credentials: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+   - Set `AWS_REGION` to the region where Bedrock is available (e.g., `us-east-1`)
+   - Set `AWS_CLAUDE_MODEL_ID` to `anthropic.claude-3-7-sonnet-20250219-v1:0`
+
+3. To test your Bedrock configuration, run:
+   ```bash
+   python -m utils.test_bedrock
+   ```
 
 ### Installation
 

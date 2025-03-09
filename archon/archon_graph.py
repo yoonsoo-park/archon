@@ -23,6 +23,7 @@ from pydantic_ai.messages import (
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from archon.pydantic_ai_coder import pydantic_ai_coder, PydanticAIDeps, list_documentation_pages_helper
 from utils.utils import get_env_var
+from utils.bedrock_client import BedrockClaudeModel
 
 # Load environment variables
 load_dotenv()
@@ -36,9 +37,19 @@ api_key = get_env_var('LLM_API_KEY') or 'no-llm-api-key-provided'
 is_ollama = "localhost" in base_url.lower()
 is_anthropic = "anthropic" in base_url.lower()
 is_openai = "openai" in base_url.lower()
+is_bedrock = base_url.lower() == "bedrock"
 
 reasoner_llm_model_name = get_env_var('REASONER_MODEL') or 'o3-mini'
-reasoner_llm_model = AnthropicModel(reasoner_llm_model_name, api_key=api_key) if is_anthropic else OpenAIModel(reasoner_llm_model_name, base_url=base_url, api_key=api_key)
+
+# Model selection for the reasoner based on the base_url
+if is_bedrock:
+    # Get the Bedrock Claude model ID
+    bedrock_model_id = get_env_var('AWS_CLAUDE_MODEL_ID') or 'anthropic.claude-3-7-sonnet-20250219-v1:0'
+    reasoner_llm_model = BedrockClaudeModel(model_id=bedrock_model_id)
+elif is_anthropic:
+    reasoner_llm_model = AnthropicModel(reasoner_llm_model_name, api_key=api_key)
+else:
+    reasoner_llm_model = OpenAIModel(reasoner_llm_model_name, base_url=base_url, api_key=api_key)
 
 reasoner = Agent(  
     reasoner_llm_model,
@@ -46,7 +57,16 @@ reasoner = Agent(
 )
 
 primary_llm_model_name = get_env_var('PRIMARY_MODEL') or 'gpt-4o-mini'
-primary_llm_model = AnthropicModel(primary_llm_model_name, api_key=api_key) if is_anthropic else OpenAIModel(primary_llm_model_name, base_url=base_url, api_key=api_key)
+
+# Model selection for the primary model based on the base_url
+if is_bedrock:
+    # Get the Bedrock Claude model ID
+    bedrock_model_id = get_env_var('AWS_CLAUDE_MODEL_ID') or 'anthropic.claude-3-7-sonnet-20250219-v1:0'
+    primary_llm_model = BedrockClaudeModel(model_id=bedrock_model_id)
+elif is_anthropic:
+    primary_llm_model = AnthropicModel(primary_llm_model_name, api_key=api_key)
+else:
+    primary_llm_model = OpenAIModel(primary_llm_model_name, base_url=base_url, api_key=api_key)
 
 router_agent = Agent(  
     primary_llm_model,
